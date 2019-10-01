@@ -1,5 +1,6 @@
-resource "aws_iam_role" "eks-worker-node" {
-  name = "eks-worker-node"
+
+resource "aws_iam_role" "eks-node" {
+  name = "terraform-eks-node"
 
   assume_role_policy = <<POLICY
 {
@@ -17,30 +18,30 @@ resource "aws_iam_role" "eks-worker-node" {
 POLICY
 }
 
-resource "aws_iam_role_policy_attachment" "eks-worker-node-AmazonEKSWorkerNodePolicy" {
+resource "aws_iam_role_policy_attachment" "eks-node-AmazonEKSWorkerNodePolicy" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
-  role       = "${aws_iam_role.eks-worker-node.name}"
+  role       = "${aws_iam_role.eks-node.name}"
 }
 
-resource "aws_iam_role_policy_attachment" "eks-worker-node-AmazonEKS_CNI_Policy" {
+resource "aws_iam_role_policy_attachment" "eks-node-AmazonEKS_CNI_Policy" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
-  role       = "${aws_iam_role.eks-worker-node.name}"
+  role       = "${aws_iam_role.eks-node.name}"
 }
 
-resource "aws_iam_role_policy_attachment" "eks-worker-node-AmazonEC2ContainerRegistryReadOnly" {
+resource "aws_iam_role_policy_attachment" "eks-node-AmazonEC2ContainerRegistryReadOnly" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
-  role       = "${aws_iam_role.eks-worker-node.name}"
+  role       = "${aws_iam_role.eks-node.name}"
 }
 
-resource "aws_iam_instance_profile" "eks-worker-node" {
-  name = "eks-worker-node"
-  role = "${aws_iam_role.eks-worker-node.name}"
+resource "aws_iam_instance_profile" "eks-node" {
+  name = "terraform-eks"
+  role = "${aws_iam_role.eks-node.name}"
 }
 
-resource "aws_security_group" "eks-worker-node" {
-  name        = "eks-worker-node"
+resource "aws_security_group" "eks-node" {
+  name        = "terraform-eks-node"
   description = "Security group for all nodes in the cluster"
-  vpc_id      = "${aws_vpc.eks-cluster.id}"
+  vpc_id      = "${aws_vpc.eks.id}"
 
   egress {
     from_port   = 0
@@ -51,27 +52,27 @@ resource "aws_security_group" "eks-worker-node" {
 
   tags = "${
     map(
-     "Name", "eks-worker-node",
+     "Name", "terraform-eks-node",
      "kubernetes.io/cluster/${var.cluster-name}", "owned",
     )
   }"
 }
 
-resource "aws_security_group_rule" "eks-worker-node-ingress-self" {
+resource "aws_security_group_rule" "eks-node-ingress-self" {
   description              = "Allow node to communicate with each other"
   from_port                = 0
   protocol                 = "-1"
-  security_group_id        = "${aws_security_group.eks-worker-node.id}"
-  source_security_group_id = "${aws_security_group.eks-worker-node.id}"
+  security_group_id        = "${aws_security_group.eks-node.id}"
+  source_security_group_id = "${aws_security_group.eks-node.id}"
   to_port                  = 65535
   type                     = "ingress"
 }
 
-resource "aws_security_group_rule" "eks-worker-node-ingress-cluster" {
+resource "aws_security_group_rule" "eks-node-ingress-cluster" {
   description              = "Allow worker Kubelets and pods to receive communication from the cluster control plane"
   from_port                = 1025
   protocol                 = "tcp"
-  security_group_id        = "${aws_security_group.eks-worker-node.id}"
+  security_group_id        = "${aws_security_group.eks-node.id}"
   source_security_group_id = "${aws_security_group.eks-cluster.id}"
   to_port                  = 65535
   type                     = "ingress"
@@ -80,51 +81,46 @@ resource "aws_security_group_rule" "eks-worker-node-ingress-cluster" {
 data "aws_ami" "eks-worker" {
   filter {
     name   = "name"
-    values = ["amazon-eks-node-${aws_eks_cluster.hpe-eks-cluster.version}-v*"]
+    values = ["amazon-eks-node-${aws_eks_cluster.eks.version}-v*"]
   }
 
   most_recent = true
   owners      = ["602401143452"] # Amazon EKS AMI Account ID
 }
 
-# EKS currently documents this required userdata for EKS worker nodes to
-# properly configure Kubernetes applications on the EC2 instance.
-# We utilize a Terraform local here to simplify Base64 encoding this
-# information into the AutoScaling Launch Configuration.
-# More information: https://docs.aws.amazon.com/eks/latest/userguide/launch-workers.html
 locals {
-  eks-worker-node-userdata = <<USERDATA
+  eks-node-userdata = <<USERDATA
 #!/bin/bash
 set -o xtrace
-/etc/eks/bootstrap.sh --apiserver-endpoint '${aws_eks_cluster.hpe-eks-cluster.endpoint}' --b64-cluster-ca '${aws_eks_cluster.hpe-eks-cluster.certificate_authority.0.data}' '${var.cluster-name}'
+/etc/eks/bootstrap.sh --apiserver-endpoint '${aws_eks_cluster.eks.endpoint}' --b64-cluster-ca '${aws_eks_cluster.eks.certificate_authority.0.data}' '${var.cluster-name}'
 USERDATA
 }
 
-resource "aws_launch_configuration" "eks-worker-node" {
+resource "aws_launch_configuration" "eks" {
   associate_public_ip_address = true
-  iam_instance_profile        = "${aws_iam_instance_profile.eks-worker-node.name}"
+  iam_instance_profile        = "${aws_iam_instance_profile.eks-node.name}"
   image_id                    = "${data.aws_ami.eks-worker.id}"
-  instance_type               = "t2.small"
-  name_prefix                 = "hpe-eks-worker-node"
-  security_groups             = ["${aws_security_group.eks-worker-node.id}"]
-  user_data_base64            = "${base64encode(local.eks-worker-node-userdata)}"
+  instance_type               = "m4.large"
+  name_prefix                 = "terraform-eks"
+  security_groups             = ["${aws_security_group.eks-node.id}"]
+  user_data_base64            = "${base64encode(local.eks-node-userdata)}"
 
   lifecycle {
     create_before_destroy = true
   }
 }
 
-resource "aws_autoscaling_group" "eks-worker-node" {
-  desired_capacity     = 3
-  launch_configuration = "${aws_launch_configuration.eks-worker-node.id}"
-  max_size             = 5
+resource "aws_autoscaling_group" "eks" {
+  desired_capacity     = 2
+  launch_configuration = "${aws_launch_configuration.eks.id}"
+  max_size             = 2
   min_size             = 1
-  name                 = "eks-worker-node"
-  vpc_zone_identifier  = "${aws_subnet.eks-cluster[*].id}"
+  name                 = "terraform-eks"
+  vpc_zone_identifier  = "${aws_subnet.eks[*].id}"
 
   tag {
     key                 = "Name"
-    value               = "worker-autoscaling-group"
+    value               = "terraform-eks"
     propagate_at_launch = true
   }
 

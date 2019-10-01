@@ -1,5 +1,7 @@
 locals {
   config_map_aws_auth = <<CONFIGMAPAWSAUTH
+
+
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -7,7 +9,7 @@ metadata:
   namespace: kube-system
 data:
   mapRoles: |
-    - rolearn: ${aws_iam_role.eks-worker-node.arn}
+    - rolearn: ${aws_iam_role.eks-node.arn}
       username: system:node:{{EC2PrivateDNSName}}
       groups:
         - system:bootstrappers
@@ -15,11 +17,13 @@ data:
 CONFIGMAPAWSAUTH
 
   kubeconfig = <<KUBECONFIG
+
+
 apiVersion: v1
 clusters:
 - cluster:
-    server: ${aws_eks_cluster.hpe-eks-cluster.endpoint}
-    certificate-authority-data: ${aws_eks_cluster.hpe-eks-cluster.certificate_authority.0.data}
+    server: ${aws_eks_cluster.eks.endpoint}
+    certificate-authority-data: ${aws_eks_cluster.eks.certificate_authority.0.data}
   name: kubernetes
 contexts:
 - context:
