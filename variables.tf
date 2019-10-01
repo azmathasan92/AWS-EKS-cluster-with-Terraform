@@ -1,4 +1,4 @@
 variable "cluster-name" {
-  default = "hpe-eks-cluster"
+  default = "terraform-eks"
   type    = "string"
 }
