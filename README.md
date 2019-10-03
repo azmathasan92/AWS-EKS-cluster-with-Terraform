@@ -26,3 +26,10 @@ you have the create the kubeconfig file and config map from the output. Finally 
 ``` kubectl --kubeconfig kubeconfig create -f configmap.yml ```
 
 # Finally, You have sucessfully created your own eks cluster
+
+-----------------------------------------------------------------------------------------------------------------------------
+# Note
+We know that EKS is amazon managed service so Aws will charge you $0.20/hr for EKS service and EC2 instance price which you used in your project. In this project we used free tier EC2 instance(t2.micro) that will not charge you.
+You can change configuration of instance in the eks-worker-nodes.tf file.
+
+-----------------------------------------------------------------------------------------------------------------------------
