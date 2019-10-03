@@ -23,6 +23,6 @@ After the above procedure you will see output of the kubeconfig and configmap
 
 you have the create the kubeconfig file and config map from the output. Finally you have to create the configmap which you have created from the output
 
-!kubectl --kubeconfig kubeconfig create -f configmap.yml
+``` kubectl --kubeconfig kubeconfig create -f configmap.yml ```
 
 # Finally, You have sucessfully created your own eks cluster
